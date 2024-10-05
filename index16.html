@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Solar System 3D Model</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+            background-color: #000;
+        }
+        canvas { display: block; }
+        #search-container {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+        }
+        #search-input {
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: 2px solid #4CAF50;
+            background: rgba(255,255,255,0.9);
+            font-size: 16px;
+            width: 200px;
+            color: #333;
+        }
+        #search-button {
+            padding: 10px 20px;
+            border-radius: 5px;
+            border: none;
+            background: #4CAF50;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+        #search-button:hover {
+            background: #45a049;
+        }
+        #info-box {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #4CAF50;
+            font-family: Arial, sans-serif;
+            display: none;
+            max-width: 300px;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+        }
+        #info-box h2 {
+            margin-top: 0;
+            color: #FFD700;
+            border-bottom: 1px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        #info-box p {
+            margin: 10px 0;
+            line-height: 1.4;
+        }
+        #reset-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.9);
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            cursor: pointer;
+            display: none;
+            z-index: 100;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+        #reset-button:hover {
+            background: #4CAF50;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div id="search-container">
+        <input type="text" id="search-input" placeholder="Search planets...">
+        <button id="search-button">Search</button>
+    </div>
+    <div id="info-box"></div>
+    <button id="reset-button">Reset View</button>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        const planetData = {
+            Sun: {
+                radius: 12,
+                orbitRadius: 0,
+                speed: 0,
+                moons: 0,
+                atmosphere: false,
+                texturePath: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/sun.jpg',
+                fact: "The Sun contains 99.86% of the mass in the Solar System.",
+                color: 0xffdd00,
+                emissive: 0xffae00,
+                emissiveIntensity: 0.7
+            },
+            Mercury: {
+                radius: 2.2,
+                orbitRadius: 28,
+                speed: 0.004,
+                moons: 0,
+                atmosphere: false,
+                texturePath: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/mercury.jpg',
+                fact: "Mercury experiences extreme temperature variations.",
+                color: 0x8c8c8c
+            },
+            Venus: {
+                radius: 3.8,
+                orbitRadius: 40,
+                speed: 0.0035,
+                moons: 0,
+                atmosphere: true,
+                texturePath: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/venus_atmosphere.jpg',
+                fact: "Venus rotates backwards compared to most other planets.",
+                color: 0xe6b98c
+            },
+            Earth: {
+                radius: 4,
+                orbitRadius: 55,
+                speed: 0.003,
+                moons: 1,
+                atmosphere: true,
+                texturePath: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/earth_atmos_2048.jpg',
+                fact: "Earth is the only known planet to support life.",
+                color: 0x2b82c9
+            },
+            Mars: {
+                radius: 3,
+                orbitRadius: 70,
+                speed: 0.0024,
+                moons: 2,
+                atmosphere: true,
+                texturePath: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/mars_1k_color.jpg',
+                fact: "Mars has the largest volcano in the Solar System.",
+                color: 0xc1440e
+            },
+            Jupiter: {
+                radius: 8,
+                orbitRadius: 90,
+                speed: 0.0013,
+                moons: 79,
+                atmosphere: true,
+                texturePath: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/jupiter_1k.jpg',
+                fact: "Jupiter has a Great Red Spot storm for over 400 years.",
+                color: 0xd8ca9d,
+                difference: "Jupiter is the largest planet in the Solar System with the most moons."
+            },
+            Saturn: {
+                radius: 7,
+                orbitRadius: 120,
+                speed: 0.001,
+                moons: 82,
+                atmosphere: true,
+                texturePath: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/saturn_1k.jpg',
+                fact: "Saturn's rings are made mostly of ice and rock.",
+                color: 0xead6b8,
+                difference: "Saturn is known for its stunning rings, made up of ice particles."
+            },
+            Uranus: {
+                radius: 5,
+                orbitRadius: 150,
+                speed: 0.0007,
+                moons: 27,
+                atmosphere: true,
+                texturePath: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/uranus_1k.jpg',
+                fact: "Uranus rotates on its side.",
+                color: 0xb1e4e7
+            },
+            Neptune: {
+                radius: 4.8,
+                orbitRadius: 180,
+                speed: 0.0005,
+                moons: 14,
+                atmosphere: true,
+                texturePath: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/neptune_1k.jpg',
+                fact: "Neptune has the strongest winds in the Solar System.",
+                color: 0x3d50d6
+            }
+        };
+
+        const textureLoader = new THREE.TextureLoader();
+        const planets = {};
+        const moonData = {
+            Earth: {
+                radius: 1,
+                orbitRadius: 6,
+                speed: 0.01,
+                texturePath: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/moon.jpg',
+                fact: "The Moon is Earth's only natural satellite."
+            }
+        };
+
+        function createPlanet(data, name) {
+            const geometry = new THREE.SphereGeometry(data.radius, 32, 32);
+            const material = new THREE.MeshPhongMaterial({
+                color: data.color,
+                emissive: data.emissive || 0x000000,
+                emissiveIntensity: data.emissiveIntensity || 0,
+                shininess: 25
+            });
+            
+            const planet = new THREE.Mesh(geometry, material);
+            planet.userData = { ...data, name };
+            
+            textureLoader.load(data.texturePath, 
+                function(texture) {
+                    planet.material.map = texture;
+                    planet.material.needsUpdate = true;
+                }
+            );
+            
+            return planet;
+        }
+
+        function createOrbit(radius) {
+            const curve = new THREE.EllipseCurve(0, 0, radius, radius);
+            const points = curve.getPoints(100);
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({ 
+                color: 0x666666,
+                transparent: true,
+                opacity: 0.3
+            });
+            const orbit = new THREE.Line(geometry, material);
+            orbit.rotation.x = Math.PI / 2; // Rotate the orbit to make it horizontal
+            return orbit;
+        }
+
+        // Create planets and orbits
+        Object.entries(planetData).forEach(([name, data]) => {
+            const planet = createPlanet(data, name);
+            const orbitContainer = new THREE.Object3D();
+            
+            if (name !== 'Sun') {
+                const orbit = createOrbit(data.orbitRadius);
+                scene.add(orbit);
+                
+                orbitContainer.add(planet);
+                planet.position.x = data.orbitRadius;
+                scene.add(orbitContainer);
+                planets[name] = { container: orbitContainer, object: planet };
+            } else {
+                scene.add(planet);
+                planets[name] = { object: planet };
+            }
+        });
+
+        // Create moon for Earth
+        function createMoon(data, planetContainer) {
+            const moonGeometry = new THREE.SphereGeometry(data.radius, 32, 32);
+            const moonMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
+            const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+            moon.userData = { ...data, name: "Moon" };
+
+            textureLoader.load(data.texturePath, function(texture) {
+                moon.material.map = texture;
+                moon.material.needsUpdate = true;
+            });
+
+            const moonOrbit = createOrbit(data.orbitRadius);
+            moonOrbit.scale.set(1, 1, 1); // Ensure the moon's orbit is circular
+            planetContainer.add(moonOrbit);
+
+            const moonContainer = new THREE.Object3D();
+            moonContainer.add(moon);
+            moon.position.x = data.orbitRadius;
+            planetContainer.add(moonContainer);
+
+            return { container: moonContainer, object: moon };
+        }
+
+        const earthContainer = planets['Earth'].container;
+        const moon = createMoon(moonData.Earth, earthContainer);
+
+        // Create Saturn's rings
+        function createSaturnRings(planet) {
+            const innerRadius = planet.userData.radius * 1.2;
+            const outerRadius = planet.userData.radius * 2;
+            const ringGeometry = new THREE.RingGeometry(innerRadius, outerRadius, 64);
+            const ringMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.5
+            });
+            const rings = new THREE.Mesh(ringGeometry, ringMaterial);
+            rings.rotation.x = Math.PI / 2;
+            planet.add(rings);
+        }
+
+        createSaturnRings(planets['Saturn'].object);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+        scene.add(ambientLight);
+        const pointLight = new THREE.PointLight(0xffffff, 2, 300);
+        scene.add(pointLight);
+
+        // Camera setup
+        camera.position.z = 200;
+        camera.position.y = 50;
+
+        let currentFocus = null;
+        const defaultCameraPosition = {
+            x: camera.position.x,
+            y: camera.position.y,
+            z: camera.position.z
+        };
+
+        let animationPaused = false;
+
+        function focusOnPlanet(planetName) {
+            const planetObj = planets[planetName];
+            if (!planetObj) return;
+
+            const planet = planetObj.object;
+            currentFocus = planet;
+            
+            const worldPosition = new THREE.Vector3();
+            planet.getWorldPosition(worldPosition);
+            
+            const targetPosition = {
+                x: worldPosition.x + planet.userData.radius * 4,
+                y: worldPosition.y + planet.userData.radius * 2,
+                z: worldPosition.z + planet.userData.radius * 4
+            };
+
+            new TWEEN.Tween(camera.position)
+                .to(targetPosition, 1500)
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .onUpdate(() => camera.lookAt(worldPosition))
+                .start();
+
+            showPlanetInfo(planet);
+            document.getElementById('reset-button').style.display = 'block';
+            
+            animationPaused = true;
+            setTimeout(() => {
+                animationPaused = false;
+            }, 3000);
+        }
+
+        function showPlanetInfo(planet) {
+            const infoBox = document.getElementById('info-box');
+            const data = planet.userData;
+            const additionalFact = data.name === 'Jupiter' || data.name === 'Saturn' ? data.difference : '';
+
+            infoBox.innerHTML = `
+                <h2>${data.name}</h2>
+                <p><strong>Radius:</strong> ${data.radius} units</p>
+                <p><strong>Orbit Radius:</strong> ${data.orbitRadius} units</p>
+                <p><strong>Moons:</strong> ${data.moons}</p>
+                <p><strong>Atmosphere:</strong> ${data.atmosphere ? 'Yes' : 'No'}</p>
+                <p><strong>Fun Fact:</strong> ${data.fact}</p>
+                <p>${additionalFact}</p>
+            `;
+            infoBox.style.display = 'block';
+        }
+
+        function resetView() {
+            new TWEEN.Tween(camera.position)
+                .to(defaultCameraPosition, 1500)
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .onUpdate(() => camera.lookAt(scene.position))
+                .start();
+            
+            document.getElementById('info-box').style.display = 'none';
+            document.getElementById('reset-button').style.display = 'none';
+            currentFocus = null;
+        }
+
+        // Event Listeners
+        document.getElementById('search-button').addEventListener('click', () => {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const planetName = Object.keys(planets).find(name => 
+                name.toLowerCase().includes(searchTerm)
+            );
+            if (planetName) {
+                focusOnPlanet(planetName);
+            }
+        });
+
+        document.getElementById('search-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('search-button').click();
+            }
+        });
+
+        document.getElementById('reset-button').addEventListener('click', resetView);
+
+        function animate(time) {
+    requestAnimationFrame(animate);
+    TWEEN.update(time);
+
+    Object.entries(planets).forEach(([name, planetObj]) => {
+        if (name !== 'Sun' && planetObj.container) {
+            planetObj.container.rotation.y += planetData[name].speed;
+        }
+        if (name === 'Sun') {
+            planetObj.object.rotation.y += 0.001;
+        } else {
+            planetObj.object.rotation.y += 0.005;
+        }
+    });
+
+            // Update moon position
+    moon.container.rotation.y += moonData.Earth.speed;
+
+renderer.render(scene, camera);
+}
+
+animate();
+
+        // Responsive design
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
